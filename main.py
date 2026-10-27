@@ -54,77 +54,51 @@ def ask_groq(prompt: str, api_key: str) -> str:
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
-_CACHED_GEMINI_MODEL = None
-
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini API с автоматическим определением доступной модели."""
-    global _CACHED_GEMINI_MODEL
+    """Google Gemini API с авто-повтором и переключением при перегрузке (503)."""
+    # Список моделей: если главная 3.8 перегружена, мгновенно пробуем дублирующие
+    models = [
+        "models/gemini-3.8-flash",
+        "models/gemini-2.0-flash",
+        "models/gemini-1.5-flash-latest",
+        "models/gemini-pro"
+    ]
     
-    ver = "v1beta"
-    model_name = "models/gemini-3.8-flash"
-    
-    if _CACHED_GEMINI_MODEL:
-        ver, model_name = _CACHED_GEMINI_MODEL
-    else:
-        # Автоматически опрашиваем Google, какие модели включены для этого ключа
-        for v in ["v1beta", "v1"]:
+    last_err = None
+    for m in models:
+        for attempt in range(2):
             try:
-                r = requests.get(
-                    f"https://generativelanguage.googleapis.com/{v}/models?key={api_key}",
+                url = f"https://generativelanguage.googleapis.com/v1beta/{m}:generateContent?key={api_key}"
+                resp = requests.post(
+                    url,
                     headers={"x-goog-api-key": api_key},
-                    timeout=2.5
+                    json={
+                        "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
+                    },
+                    timeout=3.5
                 )
-                if r.status_code == 200:
-                    models = r.json().get("models", [])
-                    candidates = []
-                    for m in models:
-                        name = m.get("name", "")
-                        methods = m.get("supportedGenerationMethods", [])
-                        if "generateContent" in methods:
-                            candidates.append(name)
-                    
-                    # Приоритет: gemini-3.8-flash -> остальные flash
-                    g38 = [c for c in candidates if "3.8-flash" in c.lower()]
-                    flash_models = [c for c in candidates if "flash" in c.lower() and "2.5" not in c.lower()]
-                    if g38:
-                        chosen = g38[0]
-                    elif flash_models:
-                        chosen = flash_models[0]
-                    else:
-                        chosen = candidates[0] if candidates else "models/gemini-3.8-flash"
-
-                    if chosen:
-                        _CACHED_GEMINI_MODEL = (v, chosen)
-                        ver, model_name = _CACHED_GEMINI_MODEL
-                        break
-                elif r.status_code != 404:
-                    # Если ошибка авторизации или локации — сразу покажем
-                    err_json = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-                    msg = err_json.get("error", {}).get("message", r.text[:150])
-                    raise RuntimeError(f"Google API ({r.status_code}): {msg}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                elif resp.status_code in [503, 429]:
+                    # Временный пик нагрузки — пробуем еще раз или другую модель
+                    time.sleep(0.2)
+                    continue
+                elif resp.status_code == 404:
+                    break
+                else:
+                    err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    msg = err_json.get("error", {}).get("message", resp.text[:150])
+                    raise RuntimeError(f"{m} ({resp.status_code}): {msg}")
             except Exception as e:
-                if "Google API" in str(e):
-                    raise
+                last_err = e
                 continue
-
-    # Отправляем запрос к гарантированно существующей модели
-    url = f"https://generativelanguage.googleapis.com/{ver}/{model_name}:generateContent?key={api_key}"
-    resp = requests.post(
-        url,
-        headers={"x-goog-api-key": api_key},
-        json={
-            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
-        },
-        timeout=3.8
-    )
-    if resp.status_code != 200:
-        err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-        msg = err_json.get("error", {}).get("message", resp.text[:150])
-        raise RuntimeError(f"{model_name} error ({resp.status_code}): {msg}")
-        
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                
+    if last_err:
+        raise last_err
+    raise RuntimeError("Все модели Gemini сейчас перегружены, попробуйте еще раз через пару секунд.")
 
 def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) -> str:
     """Универсальный клиент для OpenAI, DeepSeek, OpenRouter."""
