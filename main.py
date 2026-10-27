@@ -55,41 +55,28 @@ def ask_groq(prompt: str, api_key: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini с авто-выбором рабочей модели."""
-    # Список кандидатов
-    models_to_try = [
-        "models/gemini-3.8-flash",
-        "models/gemini-2.5-flash",
-        "models/gemini-2.0-flash",
-        "models/gemini-1.5-flash"
-    ]
-    
-    attempts_log = []
-    for m in models_to_try:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/{m}:generateContent?key={api_key}"
-            resp = requests.post(
-                url,
-                headers={"x-goog-api-key": api_key},
-                json={
-                    "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
-                },
-                timeout=1.6
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"]
-            
-            # Сохраняем статус для диагностики
-            err_snippet = resp.text[:60].replace("\n", " ")
-            attempts_log.append(f"{m.split('/')[-1]}: {resp.status_code} ({err_snippet})")
-        except Exception as e:
-            attempts_log.append(f"{m.split('/')[-1]}: exc ({str(e)[:40]})")
-            continue
-            
-    return f"Ответ Google: {'; '.join(attempts_log)[:280]}"
+    """Google Gemini 3.8 Flash — флагманская актуальная модель."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+    resp = requests.post(
+        url,
+        headers={"x-goog-api-key": api_key},
+        json={
+            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": 150,  # 2-3 предложения для быстрого ответа за 1.5 секунды
+                "temperature": 0.7
+            }
+        },
+        timeout=3.4
+    )
+    if resp.status_code == 200:
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    else:
+        err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        msg = err_json.get("error", {}).get("message", resp.text[:150])
+        raise RuntimeError(f"Gemini ({resp.status_code}): {msg}")
 
 def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) -> str:
     """Универсальный клиент для OpenAI, DeepSeek, OpenRouter."""
