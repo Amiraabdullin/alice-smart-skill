@@ -55,19 +55,26 @@ def ask_groq(prompt: str, api_key: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini 3.8 Flash — сверхбыстрый отклик за 1 секунду."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+    """Google Gemini Flash Latest — официальная модель от Google AI Studio."""
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     full_prompt = (
         f"Ты голосовой помощник Алиса. Ответь на вопрос кратко, простыми словами, "
         f"максимум 1-2 предложения, без markdown, звездочек и списков: {prompt}"
     )
     resp = requests.post(
         url,
-        headers={"x-goog-api-key": api_key},
+        headers={
+            "Content-Type": "application/json",
+            "X-goog-api-key": api_key
+        },
         json={
-            "contents": [{"parts": [{"text": full_prompt}]}],
+            "contents": [
+                {
+                    "parts": [{"text": full_prompt}]
+                }
+            ],
             "generationConfig": {
-                "maxOutputTokens": 100,  # Ограничение до 100 токенов ускоряет генерацию в 3 раза
+                "maxOutputTokens": 120,
                 "temperature": 0.7
             }
         },
