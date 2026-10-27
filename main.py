@@ -35,6 +35,24 @@ ACTIVATION_PHRASES = sorted([
     "открой супер мозг",
     "включи супер мозг",
     "супер мозг",
+    "запусти навык супермозг и спроси",
+    "запусти навык супермозг и скажи",
+    "запусти навык супермозг",
+    "открой навык супермозг и спроси",
+    "открой навык супермозг",
+    "включи навык супермозг и спроси",
+    "включи навык супермозг",
+    "спроси у навыка супермозг",
+    "попроси навык супермозг",
+    "спроси у супермозга",
+    "спроси супермозг",
+    "попроси супермозг",
+    "скажи супермозгу",
+    "навык супермозг",
+    "запусти супермозг",
+    "открой супермозг",
+    "включи супермозг",
+    "супермозг",
     "запусти навык чат гпт и спроси",
     "запусти навык чат гпт",
     "открой навык чат гпт",
@@ -49,7 +67,9 @@ ACTIVATION_PHRASES = sorted([
     "открой навык",
     "включи навык",
     "поговори с супер мозгом",
+    "поговори с супермозгом",
     "позови супер мозг",
+    "позови супермозг",
     "позови чат гпт",
 ], key=len, reverse=True)
 
@@ -57,14 +77,21 @@ EXIT_WORDS = {
     "стоп", "хватит", "выход", "отмена", "пока", "закройся", "отбой", "выключись"
 }
 
+GREETING_WORDS = {
+    "", "привет", "здравствуй", "здравствуйте", "старт", "начать", "запуск",
+    "супермозг", "супер мозг", "чат гпт", "навык"
+}
+
 def clean_activation_prefix(text: str) -> str:
-    cleaned = (text or "").strip()
-    low = cleaned.lower()
+    cleaned = (text or "").strip().lower()
+    cleaned = cleaned.replace("супер-мозг", "супер мозг")
+    cleaned = cleaned.replace("чат-гпт", "чат гпт")
+    cleaned = cleaned.replace("chatgpt", "чат гпт")
+    cleaned = cleaned.replace("chat gpt", "чат гпт")
     for phrase in ACTIVATION_PHRASES:
-        if low.startswith(phrase):
+        if cleaned.startswith(phrase):
             cleaned = cleaned[len(phrase):].strip(" ,?!")
-            low = cleaned.lower()
-            if low.startswith("и "):
+            if cleaned.startswith("и "):
                 cleaned = cleaned[2:].strip(" ,?!")
             break
     return cleaned
@@ -251,9 +278,9 @@ def yandex_dialog():
     query_from_original = clean_activation_prefix(original)
     user_query = query_from_command or query_from_original
 
-    # СЦЕНАРИЙ 1: Запуск навыка ("Алиса, запусти навык супер мозг")
+    # СЦЕНАРИЙ 1: Запуск навыка ("Алиса, запусти навык супер мозг" и любые вариации)
     # Возвращаем мгновенное приветствие с end_session: False
-    if is_new_session and not user_query:
+    if is_new_session and (not user_query or len(user_query) < 4 or user_query in GREETING_WORDS):
         return jsonify({
             "response": {
                 "text": "Я на связи! Задайте мне любой вопрос, и я отвечу с помощью нейросети.",
