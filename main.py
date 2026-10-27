@@ -49,7 +49,7 @@ def ask_groq(prompt: str, api_key: str) -> str:
             "max_tokens": 250,
             "temperature": 0.7
         },
-        timeout=2.8
+        timeout=3.8
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
@@ -64,7 +64,7 @@ def ask_gemini(prompt: str, api_key: str) -> str:
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
         },
-        timeout=2.8
+        timeout=3.8
     )
     resp.raise_for_status()
     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
@@ -84,7 +84,7 @@ def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) 
             "max_tokens": 250,
             "temperature": 0.7
         },
-        timeout=2.8
+        timeout=3.8
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
@@ -100,12 +100,18 @@ def generate_ai_response(user_query: str) -> str:
     try:
         # Приоритет 1: Бесплатный Hugging Face
         if hf_key:
+            hf_errors = []
             for model in ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3", "meta-llama/Llama-3.1-8B-Instruct"]:
                 try:
                     return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", model)
                 except Exception as ex:
-                    print(f"HF model {model} failed: {ex}")
+                    err_str = str(ex)
+                    if hasattr(ex, 'response') and ex.response is not None:
+                        err_str += f": {ex.response.text[:200]}"
+                    hf_errors.append(f"{model} -> {err_str}")
+                    print(f"HF model {model} failed: {err_str}")
                     continue
+            return f"Ошибка HuggingFace: {'; '.join(hf_errors)[:300]}"
 
         if groq_key:
             return ask_groq(user_query, groq_key)
