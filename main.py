@@ -54,38 +54,70 @@ def ask_groq(prompt: str, api_key: str) -> str:
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
+_CACHED_GEMINI_MODEL = None
+
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini API (поддержка Gemini 2.0 Flash и 1.5 Flash)."""
-    # Список актуальных моделей Google (Gemini 2.0 Flash — флагман с мгновенным откликом)
-    models = ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
-    last_error = None
-    for m in models:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
-            resp = requests.post(
-                url,
-                headers={"x-goog-api-key": api_key},
-                json={
-                    "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
-                },
-                timeout=3.8
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"]
-            elif resp.status_code == 404:
+    """Google Gemini API с автоматическим определением доступной модели."""
+    global _CACHED_GEMINI_MODEL
+    
+    ver = "v1beta"
+    model_name = "models/gemini-1.5-flash"
+    
+    if _CACHED_GEMINI_MODEL:
+        ver, model_name = _CACHED_GEMINI_MODEL
+    else:
+        # Автоматически опрашиваем Google, какие модели включены для этого ключа
+        for v in ["v1beta", "v1"]:
+            try:
+                r = requests.get(
+                    f"https://generativelanguage.googleapis.com/{v}/models?key={api_key}",
+                    headers={"x-goog-api-key": api_key},
+                    timeout=2.5
+                )
+                if r.status_code == 200:
+                    models = r.json().get("models", [])
+                    candidates = []
+                    for m in models:
+                        name = m.get("name", "")
+                        methods = m.get("supportedGenerationMethods", [])
+                        if "generateContent" in methods:
+                            candidates.append(name)
+                    
+                    # Приоритет: flash -> 2.0 -> любая подходящая
+                    flash_models = [c for c in candidates if "flash" in c.lower()]
+                    chosen = flash_models[0] if flash_models else (candidates[0] if candidates else None)
+                    if chosen:
+                        _CACHED_GEMINI_MODEL = (v, chosen)
+                        ver, model_name = _CACHED_GEMINI_MODEL
+                        break
+                elif r.status_code != 404:
+                    # Если ошибка авторизации или локации — сразу покажем
+                    err_json = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+                    msg = err_json.get("error", {}).get("message", r.text[:150])
+                    raise RuntimeError(f"Google API ({r.status_code}): {msg}")
+            except Exception as e:
+                if "Google API" in str(e):
+                    raise
                 continue
-            resp.raise_for_status()
-        except Exception as e:
-            last_error = e
-            if "404" in str(e):
-                continue
-            raise
-    if last_error:
-        raise last_error
-    raise RuntimeError("No compatible Gemini model found.")
+
+    # Отправляем запрос к гарантированно существующей модели
+    url = f"https://generativelanguage.googleapis.com/{ver}/{model_name}:generateContent?key={api_key}"
+    resp = requests.post(
+        url,
+        headers={"x-goog-api-key": api_key},
+        json={
+            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
+        },
+        timeout=3.8
+    )
+    if resp.status_code != 200:
+        err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        msg = err_json.get("error", {}).get("message", resp.text[:150])
+        raise RuntimeError(f"{model_name} error ({resp.status_code}): {msg}")
+        
+    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) -> str:
     """Универсальный клиент для OpenAI, DeepSeek, OpenRouter."""
