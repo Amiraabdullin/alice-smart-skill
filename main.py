@@ -7,13 +7,66 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 SYSTEM_PROMPT = (
-    "Ты умный голосовой ассистент для умной колонки Яндекс Алиса. "
-    "Отвечай кратко, емко, естественным разговорным языком. "
-    "Твой ответ будет озвучен голосом, поэтому КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать: "
-    "markdown-разметку (звездочки, решетки, тире, ссылки), списки с цифрами, "
-    "смайлики, таблицы и любые спецсимволы. "
-    "Длина ответа — максимум 2-3 предложения, если только тебя прямо не попросили рассказать подробно."
+    "Ты голосовой помощник 'Супер мозг' в умной колонке Яндекс Станция. "
+    "Отвечай кратко, понятно и по делу: максимум 1-3 предложения (до 45 слов). "
+    "Твой ответ будет озвучен Алисой вслух. "
+    "Категорически запрещено использовать: markdown-разметку (никаких звездочек *, решеток #, "
+    "тире, списков, кода), смайлики, таблицы и спецсимволы. "
+    "Используй только грамотный живой разговорный русский язык."
 )
+
+ACTIVATION_PHRASES = sorted([
+    "запусти навык супер мозг и спроси",
+    "запусти навык супер мозг и скажи",
+    "запусти навык супер мозг",
+    "открой навык супер мозг и спроси",
+    "открой навык супер мозг",
+    "включи навык супер мозг и спроси",
+    "включи навык супер мозг",
+    "спроси у навыка супер мозг",
+    "попроси навык супер мозг",
+    "спроси у супер мозга",
+    "спроси супер мозг",
+    "попроси супер мозг",
+    "скажи супер мозгу",
+    "навык супер мозг",
+    "запусти супер мозг",
+    "открой супер мозг",
+    "включи супер мозг",
+    "супер мозг",
+    "запусти навык чат гпт и спроси",
+    "запусти навык чат гпт",
+    "открой навык чат гпт",
+    "включи навык чат гпт",
+    "запусти чат гпт",
+    "открой чат гпт",
+    "включи чат гпт",
+    "попроси чат гпт",
+    "спроси у чат гпт",
+    "чат гпт",
+    "запусти навык",
+    "открой навык",
+    "включи навык",
+    "поговори с супер мозгом",
+    "позови супер мозг",
+    "позови чат гпт",
+], key=len, reverse=True)
+
+EXIT_WORDS = {
+    "стоп", "хватит", "выход", "отмена", "пока", "закройся", "отбой", "выключись"
+}
+
+def clean_activation_prefix(text: str) -> str:
+    cleaned = (text or "").strip()
+    low = cleaned.lower()
+    for phrase in ACTIVATION_PHRASES:
+        if low.startswith(phrase):
+            cleaned = cleaned[len(phrase):].strip(" ,?!")
+            low = cleaned.lower()
+            if low.startswith("и "):
+                cleaned = cleaned[2:].strip(" ,?!")
+            break
+    return cleaned
 
 def clean_speech_text(text: str) -> str:
     """Удаляет markdown, спецсимволы и форматирует текст для красивой начитки Алисой."""
@@ -36,7 +89,7 @@ def clean_speech_text(text: str) -> str:
     return text
 
 def ask_groq(prompt: str, api_key: str) -> str:
-    """Groq API — сверхбыстрый бесплатный инференс (отклик 200-400 мс)."""
+    """Groq API — сверхбыстрый инференс (отклик 200-400 мс)."""
     resp = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
@@ -46,16 +99,16 @@ def ask_groq(prompt: str, api_key: str) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 250,
+            "max_tokens": 150,
             "temperature": 0.7
         },
-        timeout=3.8
+        timeout=3.0
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini Flash Latest — официальная модель от Google AI Studio."""
+    """Google Gemini Flash Latest."""
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     full_prompt = (
         f"Ты голосовой помощник Алиса. Ответь на вопрос кратко, простыми словами, "
@@ -78,7 +131,7 @@ def ask_gemini(prompt: str, api_key: str) -> str:
                 "temperature": 0.7
             }
         },
-        timeout=4.2
+        timeout=3.0
     )
     if resp.status_code == 200:
         data = resp.json()
@@ -100,10 +153,10 @@ def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) 
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 250,
+            "max_tokens": 150,
             "temperature": 0.7
         },
-        timeout=3.8
+        timeout=3.0
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
@@ -141,7 +194,7 @@ def generate_ai_response(user_query: str) -> str:
                         ],
                         "model": "openai"
                     },
-                    timeout=2.8
+                    timeout=2.6
                 )
                 if resp.status_code == 200 and resp.text.strip():
                     return resp.text.strip()
@@ -150,18 +203,17 @@ def generate_ai_response(user_query: str) -> str:
             
             return "Я на связи! Навык работает, но бесплатный сервер сейчас немного перегружен. Задайте вопрос еще раз."
     except requests.exceptions.Timeout:
-        return "Нейросеть задумалась слишком долго. Пожалуйста, задайте вопрос ещё раз."
+        return "Нейросеть не успела ответить за пару секунд. Пожалуйста, повторите вопрос."
     except Exception as e:
         err_msg = str(e)
         if hasattr(e, 'response') and e.response is not None:
             err_msg += f": {e.response.text[:200]}"
         print(f"Error querying LLM: {err_msg}")
-        # Если у DeepSeek закончился баланс или неверный ключ
         if "402" in err_msg or "Insufficient Balance" in err_msg:
-            return "На аккаунте DeepSeek нулевой баланс. Для работы API требуется пополнить баланс или использовать другой ключ."
+            return "На аккаунте DeepSeek нулевой баланс. Требуется пополнить баланс."
         if "401" in err_msg:
-            return "Ошибка авторизации: ключ указан неверно. Проверьте правильность ключа в настройках."
-        return f"Ошибка обращения: {err_msg[:200]}"
+            return "Ошибка авторизации: ключ указан неверно."
+        return "Произошла временная ошибка при обращении к нейросети. Попробуйте еще раз."
 
 @app.route("/", methods=["GET"])
 def healthcheck():
@@ -181,39 +233,64 @@ def yandex_dialog():
     
     req = req_data.get("request", {})
     session = req_data.get("session", {})
-    user_query = req.get("command", "").strip() or req.get("original_utterance", "").strip()
     is_new_session = session.get("new", False)
 
-    # Если пользователь просто открыл навык без вопроса ("Алиса, включи навык Умник")
+    command = req.get("command", "").strip()
+    original = req.get("original_utterance", "").strip()
+
+    # Очищаем активационные префиксы
+    query_from_command = clean_activation_prefix(command)
+    query_from_original = clean_activation_prefix(original)
+    user_query = query_from_command or query_from_original
+
+    # СЦЕНАРИЙ 1: Запуск навыка ("Алиса, запусти навык супер мозг")
+    # Возвращаем мгновенное приветствие с end_session: False
     if is_new_session and not user_query:
         return jsonify({
             "response": {
                 "text": "Я на связи! Задайте мне любой вопрос, и я отвечу с помощью нейросети.",
+                "tts": "Я на связи! Задайте мне любой вопрос, и я отвечу с помощью нейросети.",
                 "end_session": False
             },
             "version": "1.0"
         })
 
-    # Если пользователь сказал команду выхода
-    if user_query.lower() in ["стоп", "хватит", "выход", "отмена", "пока"]:
+    # СЦЕНАРИЙ 2: Команда выхода
+    if user_query.lower() in EXIT_WORDS:
         return jsonify({
             "response": {
                 "text": "До связи!",
+                "tts": "До связи!",
                 "end_session": True
             },
             "version": "1.0"
         })
 
-    # Отправляем вопрос в LLM
+    # Пустая фраза при продолжении диалога (пауза/тишина)
+    if not user_query:
+        return jsonify({
+            "response": {
+                "text": "Я вас слушаю. Задайте вопрос или скажите 'стоп'.",
+                "tts": "Я вас слушаю. Задайте вопрос или скажите стоп.",
+                "end_session": False
+            },
+            "version": "1.0"
+        })
+
+    # СЦЕНАРИЙ 3: Запрос к нейросети
     raw_answer = generate_ai_response(user_query)
     clean_answer = clean_speech_text(raw_answer)
 
-    # end_session: True — главное правило!
-    # Сессия сразу завершается, и колонка свободна для музыки и обычных дел.
+    # ЛОГИКА end_session:
+    # 1) Одноразовый вопрос ("Алиса, спроси у супер мозга...") -> is_new_session: True -> end_session: True (сразу освобождает колонку для музыки/таймеров)
+    # 2) Внутри диалога ("Алиса, запусти навык...") -> is_new_session: False -> end_session: False (держит сессию открытой для продолжения беседы)
+    should_end = True if is_new_session else False
+
     return jsonify({
         "response": {
             "text": clean_answer,
-            "end_session": True
+            "tts": clean_answer,
+            "end_session": should_end
         },
         "version": "1.0"
     })
