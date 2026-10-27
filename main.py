@@ -89,28 +89,8 @@ def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) 
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
-def ask_github_models(prompt: str, token: str) -> str:
-    """Бесплатные модели GitHub Models (работает через токен любого GitHub-аккаунта)."""
-    resp = requests.post(
-        "https://models.github.ai/inference/chat/completions",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": 250,
-            "temperature": 0.7
-        },
-        timeout=3.8
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
 def generate_ai_response(user_query: str) -> str:
     """Опрашивает доступную нейросеть с тайм-аутом, безопасным для Алисы."""
-    github_token = (os.getenv("GITHUB_TOKEN") or os.getenv("GITHUB_API_KEY") or "").strip()
     gemini_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
     deepseek_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
@@ -118,11 +98,7 @@ def generate_ai_response(user_query: str) -> str:
     hf_key = (os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN") or "").strip()
 
     try:
-        # Приоритет 1: GitHub Models (GPT-4o-mini бесплатно для всех пользователей GitHub)
-        if github_token:
-            return ask_github_models(user_query, github_token)
-
-        # Приоритет 2: Google Gemini (бесплатно без карт)
+        # Приоритет 1: Google Gemini (100% бесплатно навсегда, без карт и без балансов)
         if gemini_key:
             return ask_gemini(user_query, gemini_key)
 
