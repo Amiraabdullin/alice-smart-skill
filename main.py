@@ -55,11 +55,19 @@ def ask_groq(prompt: str, api_key: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini 3.8 Flash с быстрым откликом и защитой от тайм-аута."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+    """Google Gemini с мгновенным переключением при временном пике нагрузки 503."""
+    # Если 3.8-flash на секунду перегружена, мгновенно пробуем облегченные версии
+    models_to_try = [
+        "models/gemini-3.8-flash",
+        "models/gemini-2.0-flash",
+        "models/gemini-2.0-flash-lite",
+        "models/gemini-1.5-flash-8b"
+    ]
     
-    for attempt in range(2):
+    last_msg = ""
+    for m in models_to_try:
         try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/{m}:generateContent?key={api_key}"
             resp = requests.post(
                 url,
                 headers={"x-goog-api-key": api_key},
@@ -68,27 +76,24 @@ def ask_gemini(prompt: str, api_key: str) -> str:
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
                 },
-                timeout=2.0
+                timeout=1.8
             )
             if resp.status_code == 200:
                 data = resp.json()
                 return data["candidates"][0]["content"]["parts"][0]["text"]
-            elif resp.status_code in [503, 429]:
-                # Временный секундный пик на сервере Google — ждем 0.3 сек и пробуем еще раз
-                time.sleep(0.3)
+            elif resp.status_code in [503, 429, 404]:
+                # Временная перегрузка или старая модель — мгновенно пробуем следующую
                 continue
             else:
                 err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                msg = err_json.get("error", {}).get("message", resp.text[:150])
-                raise RuntimeError(f"Gemini error ({resp.status_code}): {msg}")
-        except requests.exceptions.Timeout:
-            continue
-        except Exception as e:
-            if "Gemini error" in str(e):
-                raise
+                last_msg = err_json.get("error", {}).get("message", resp.text[:150])
+        except Exception:
             continue
             
-    return "Сервер Google Gemini сейчас кратковременно перегружен. Задайте вопрос еще раз через пару секунд."
+    # Если все 4 модели попали под секундный пик
+    if last_msg:
+        raise RuntimeError(last_msg)
+    return "Нейросеть сейчас обрабатывает много запросов. Пожалуйста, повторите вопрос еще раз."
 
 def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) -> str:
     """Универсальный клиент для OpenAI, DeepSeek, OpenRouter."""
