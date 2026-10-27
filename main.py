@@ -61,7 +61,7 @@ def ask_gemini(prompt: str, api_key: str) -> str:
     global _CACHED_GEMINI_MODEL
     
     ver = "v1beta"
-    model_name = "models/gemini-1.5-flash"
+    model_name = "models/gemini-3.8-flash"
     
     if _CACHED_GEMINI_MODEL:
         ver, model_name = _CACHED_GEMINI_MODEL
@@ -83,9 +83,16 @@ def ask_gemini(prompt: str, api_key: str) -> str:
                         if "generateContent" in methods:
                             candidates.append(name)
                     
-                    # Приоритет: flash -> 2.0 -> любая подходящая
-                    flash_models = [c for c in candidates if "flash" in c.lower()]
-                    chosen = flash_models[0] if flash_models else (candidates[0] if candidates else None)
+                    # Приоритет: gemini-3.8-flash -> остальные flash
+                    g38 = [c for c in candidates if "3.8-flash" in c.lower()]
+                    flash_models = [c for c in candidates if "flash" in c.lower() and "2.5" not in c.lower()]
+                    if g38:
+                        chosen = g38[0]
+                    elif flash_models:
+                        chosen = flash_models[0]
+                    else:
+                        chosen = candidates[0] if candidates else "models/gemini-3.8-flash"
+
                     if chosen:
                         _CACHED_GEMINI_MODEL = (v, chosen)
                         ver, model_name = _CACHED_GEMINI_MODEL
