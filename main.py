@@ -284,7 +284,6 @@ def yandex_dialog():
         return jsonify({
             "response": {
                 "text": "Я на связи! Задайте мне любой вопрос, и я отвечу с помощью нейросети.",
-                "tts": "Я на связи! Задайте мне любой вопрос, и я отвечу с помощью нейросети.",
                 "end_session": False
             },
             "session": session_resp,
@@ -296,7 +295,6 @@ def yandex_dialog():
         return jsonify({
             "response": {
                 "text": "До связи!",
-                "tts": "До связи!",
                 "end_session": True
             },
             "session": session_resp,
@@ -308,7 +306,6 @@ def yandex_dialog():
         return jsonify({
             "response": {
                 "text": "Я вас слушаю. Задайте вопрос или скажите 'стоп'.",
-                "tts": "Я вас слушаю. Задайте вопрос или скажите стоп.",
                 "end_session": False
             },
             "session": session_resp,
@@ -327,7 +324,6 @@ def yandex_dialog():
     return jsonify({
         "response": {
             "text": clean_answer,
-            "tts": clean_answer,
             "end_session": should_end
         },
         "session": session_resp,
