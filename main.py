@@ -91,10 +91,10 @@ def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) 
 
 def generate_ai_response(user_query: str) -> str:
     """Опрашивает доступную нейросеть с тайм-аутом, безопасным для Алисы."""
-    groq_key = os.getenv("GROQ_API_KEY")
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
+    groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    gemini_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    deepseek_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
+    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
 
     try:
         if groq_key:
@@ -102,7 +102,7 @@ def generate_ai_response(user_query: str) -> str:
         elif gemini_key:
             return ask_gemini(user_query, gemini_key)
         elif deepseek_key:
-            return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com/v1", "deepseek-chat")
+            return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
         elif openai_key:
             return ask_openai_compatible(user_query, openai_key, "https://api.openai.com/v1", "gpt-4o-mini")
         else:
@@ -115,7 +115,7 @@ def generate_ai_response(user_query: str) -> str:
                             {"role": "system", "content": SYSTEM_PROMPT},
                             {"role": "user", "content": user_query}
                         ],
-                        "model": "mistral"
+                        "model": "openai"
                     },
                     timeout=2.8
                 )
@@ -128,8 +128,16 @@ def generate_ai_response(user_query: str) -> str:
     except requests.exceptions.Timeout:
         return "Нейросеть задумалась слишком долго. Пожалуйста, задайте вопрос ещё раз."
     except Exception as e:
-        print(f"Error querying LLM: {e}")
-        return "Произошла ошибка при обращении к нейросети. Попробуйте еще раз позже."
+        err_msg = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            err_msg += f": {e.response.text[:200]}"
+        print(f"Error querying LLM: {err_msg}")
+        # Если у DeepSeek закончился баланс или неверный ключ
+        if "402" in err_msg or "Insufficient Balance" in err_msg:
+            return "На аккаунте DeepSeek нулевой баланс. Для работы API требуется пополнить баланс или использовать другой ключ."
+        if "401" in err_msg:
+            return "Ошибка авторизации: ключ указан неверно. Проверьте правильность ключа в настройках."
+        return f"Ошибка обращения: {err_msg[:200]}"
 
 @app.route("/", methods=["GET"])
 def healthcheck():
