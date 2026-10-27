@@ -110,21 +110,21 @@ def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) 
 
 def generate_ai_response(user_query: str) -> str:
     """Опрашивает доступную нейросеть с тайм-аутом, безопасным для Алисы."""
+    deepseek_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     gemini_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
-    deepseek_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     hf_key = (os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN") or "").strip()
 
     try:
-        # Приоритет 1: Google Gemini (100% бесплатно навсегда, без карт и без балансов)
+        # Приоритет 1: DeepSeek (пополненный баланс, топовая модель DeepSeek-V3, сверхбыстрый отклик)
+        if deepseek_key:
+            return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
+
         if gemini_key:
             return ask_gemini(user_query, gemini_key)
-
-        if groq_key:
+        elif groq_key:
             return ask_groq(user_query, groq_key)
-        elif deepseek_key:
-            return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
         elif hf_key:
             return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct")
         elif openai_key:
