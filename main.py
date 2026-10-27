@@ -55,19 +55,37 @@ def ask_groq(prompt: str, api_key: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 def ask_gemini(prompt: str, api_key: str) -> str:
-    """Google Gemini API (быстрый бесплатный тариф)."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    resp = requests.post(
-        url,
-        json={
-            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
-        },
-        timeout=3.8
-    )
-    resp.raise_for_status()
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    """Google Gemini API (поддержка Gemini 2.0 Flash и 1.5 Flash)."""
+    # Список актуальных моделей Google (Gemini 2.0 Flash — флагман с мгновенным откликом)
+    models = ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
+    last_error = None
+    for m in models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+            resp = requests.post(
+                url,
+                headers={"x-goog-api-key": api_key},
+                json={
+                    "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": 250, "temperature": 0.7}
+                },
+                timeout=3.8
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+            elif resp.status_code == 404:
+                continue
+            resp.raise_for_status()
+        except Exception as e:
+            last_error = e
+            if "404" in str(e):
+                continue
+            raise
+    if last_error:
+        raise last_error
+    raise RuntimeError("No compatible Gemini model found.")
 
 def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) -> str:
     """Универсальный клиент для OpenAI, DeepSeek, OpenRouter."""
