@@ -89,42 +89,49 @@ def ask_openai_compatible(prompt: str, api_key: str, base_url: str, model: str) 
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
+def ask_github_models(prompt: str, token: str) -> str:
+    """Бесплатные модели GitHub Models (работает через токен любого GitHub-аккаунта)."""
+    resp = requests.post(
+        "https://models.github.ai/inference/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 250,
+            "temperature": 0.7
+        },
+        timeout=3.8
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
 def generate_ai_response(user_query: str) -> str:
     """Опрашивает доступную нейросеть с тайм-аутом, безопасным для Алисы."""
-    groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
+    github_token = (os.getenv("GITHUB_TOKEN") or os.getenv("GITHUB_API_KEY") or "").strip()
     gemini_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    groq_key = (os.getenv("GROQ_API_KEY") or "").strip()
     deepseek_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     hf_key = (os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN") or "").strip()
 
     try:
-        # Приоритет 1: Бесплатный Hugging Face
-        if hf_key:
-            hf_errors = []
-            for model in ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3", "meta-llama/Llama-3.1-8B-Instruct"]:
-                try:
-                    return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", model)
-                except Exception as ex:
-                    err_str = str(ex)
-                    if hasattr(ex, 'response') and ex.response is not None:
-                        err_str += f": {ex.response.text[:200]}"
-                    hf_errors.append(f"{model} -> {err_str}")
-                    print(f"HF model {model} failed: {err_str}")
-                    continue
-            return f"Ошибка HuggingFace: {'; '.join(hf_errors)[:300]}"
+        # Приоритет 1: GitHub Models (GPT-4o-mini бесплатно для всех пользователей GitHub)
+        if github_token:
+            return ask_github_models(user_query, github_token)
+
+        # Приоритет 2: Google Gemini (бесплатно без карт)
+        if gemini_key:
+            return ask_gemini(user_query, gemini_key)
 
         if groq_key:
             return ask_groq(user_query, groq_key)
-        elif gemini_key:
-            return ask_gemini(user_query, gemini_key)
         elif deepseek_key:
-            try:
-                return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
-            except Exception as ds_err:
-                print(f"DeepSeek error (falling back): {ds_err}")
-                if hf_key:
-                    return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct")
-                raise
+            return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
+        elif hf_key:
+            return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct")
         elif openai_key:
             return ask_openai_compatible(user_query, openai_key, "https://api.openai.com/v1", "gpt-4o-mini")
         else:
