@@ -238,6 +238,13 @@ def yandex_dialog():
     command = req.get("command", "").strip()
     original = req.get("original_utterance", "").strip()
 
+    # Извлекаем сессию для обязательного эхо-ответа в Яндекс Диалоги
+    session_resp = {
+        "session_id": session.get("session_id", ""),
+        "message_id": session.get("message_id", 0),
+        "user_id": session.get("user_id", "")
+    }
+
     # Очищаем активационные префиксы
     query_from_command = clean_activation_prefix(command)
     query_from_original = clean_activation_prefix(original)
@@ -252,6 +259,7 @@ def yandex_dialog():
                 "tts": "Я на связи! Задайте мне любой вопрос, и я отвечу с помощью нейросети.",
                 "end_session": False
             },
+            "session": session_resp,
             "version": "1.0"
         })
 
@@ -263,6 +271,7 @@ def yandex_dialog():
                 "tts": "До связи!",
                 "end_session": True
             },
+            "session": session_resp,
             "version": "1.0"
         })
 
@@ -274,6 +283,7 @@ def yandex_dialog():
                 "tts": "Я вас слушаю. Задайте вопрос или скажите стоп.",
                 "end_session": False
             },
+            "session": session_resp,
             "version": "1.0"
         })
 
@@ -292,6 +302,7 @@ def yandex_dialog():
             "tts": clean_answer,
             "end_session": should_end
         },
+        "session": session_resp,
         "version": "1.0"
     })
 
