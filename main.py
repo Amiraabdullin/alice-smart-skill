@@ -105,7 +105,7 @@ def generate_ai_response(user_query: str) -> str:
         elif deepseek_key:
             return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
         elif hf_key:
-            return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/hf-inference/v1", "Qwen/Qwen2.5-72B-Instruct")
+            return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct")
         elif openai_key:
             return ask_openai_compatible(user_query, openai_key, "https://api.openai.com/v1", "gpt-4o-mini")
         else:
