@@ -95,6 +95,7 @@ def generate_ai_response(user_query: str) -> str:
     gemini_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     deepseek_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
     openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    hf_key = (os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN") or "").strip()
 
     try:
         if groq_key:
@@ -103,6 +104,8 @@ def generate_ai_response(user_query: str) -> str:
             return ask_gemini(user_query, gemini_key)
         elif deepseek_key:
             return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
+        elif hf_key:
+            return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/hf-inference/v1", "Qwen/Qwen2.5-72B-Instruct")
         elif openai_key:
             return ask_openai_compatible(user_query, openai_key, "https://api.openai.com/v1", "gpt-4o-mini")
         else:
