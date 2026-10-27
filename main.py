@@ -106,11 +106,25 @@ def generate_ai_response(user_query: str) -> str:
         elif openai_key:
             return ask_openai_compatible(user_query, openai_key, "https://api.openai.com/v1", "gpt-4o-mini")
         else:
-            # Демо-режим, если ключ ещё не указан
-            return (
-                "Навык успешно подключен и готов к работе! "
-                "Чтобы я мог отвечать с помощью нейросети, укажите бесплатный ключ Groq или Gemini в настройках сервера."
-            )
+            # Автоматический шлюз без ключей (на сервере Vercel работает без VPN и без регистрации)
+            try:
+                resp = requests.post(
+                    "https://text.pollinations.ai/",
+                    json={
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": user_query}
+                        ],
+                        "model": "mistral"
+                    },
+                    timeout=2.8
+                )
+                if resp.status_code == 200 and resp.text.strip():
+                    return resp.text.strip()
+            except Exception as ex:
+                print(f"Zero-key gateway error: {ex}")
+            
+            return "Я на связи! Навык работает, но бесплатный сервер сейчас немного перегружен. Задайте вопрос еще раз."
     except requests.exceptions.Timeout:
         return "Нейросеть задумалась слишком долго. Пожалуйста, задайте вопрос ещё раз."
     except Exception as e:
