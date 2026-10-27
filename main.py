@@ -98,14 +98,27 @@ def generate_ai_response(user_query: str) -> str:
     hf_key = (os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN") or "").strip()
 
     try:
+        # Приоритет 1: Бесплатный Hugging Face
+        if hf_key:
+            for model in ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3", "meta-llama/Llama-3.1-8B-Instruct"]:
+                try:
+                    return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", model)
+                except Exception as ex:
+                    print(f"HF model {model} failed: {ex}")
+                    continue
+
         if groq_key:
             return ask_groq(user_query, groq_key)
         elif gemini_key:
             return ask_gemini(user_query, gemini_key)
         elif deepseek_key:
-            return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
-        elif hf_key:
-            return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct")
+            try:
+                return ask_openai_compatible(user_query, deepseek_key, "https://api.deepseek.com", "deepseek-chat")
+            except Exception as ds_err:
+                print(f"DeepSeek error (falling back): {ds_err}")
+                if hf_key:
+                    return ask_openai_compatible(user_query, hf_key, "https://router.huggingface.co/v1", "Qwen/Qwen2.5-72B-Instruct")
+                raise
         elif openai_key:
             return ask_openai_compatible(user_query, openai_key, "https://api.openai.com/v1", "gpt-4o-mini")
         else:
